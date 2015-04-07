@@ -15,38 +15,43 @@ set -e
 #
 
 num_cmp(){
-   if [ $# -lt  3 ];then
-	   return 1
-   fi
-   local res=$(echo "$1 $3"|awk "{ res = \$1 $2 \$2; print res;}")
-   if [ $res -eq 1 ];then
-	   return 0
-   else
-	   return 1
-   fi
+	if [ $# -lt  3 ];then
+		return 1
+	fi
+	local res=$(echo "$1 $3"|awk "{ res = \$1 $2 \$2; print res;}")
+	if [ $res -eq 1 ];then
+		return 0
+	else
+		return 1
+	fi
 }
 disable_selinux(){
-  while true ; do
-      echo "enalbed selinux feature may reflect with docker."
-      read -p "Do you want to disable selinux?[(y/yes)/(n/no)]:" ans
-      ans="$(echo "$ans" | tr '[:upper:]' '[:lower:]')"
-      case "$ans"  in 
-	y|yes)
-	   setenforce 0
-	   sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' \
-		   /etc/selinux/config
-	   break
-	   ;;
-	n|no)
-	   exit 1
-	   ;;
-	*)
-	   ;; 
-     esac
-  done
+	cur_status=$(getenforce)
+	if [ "$cur_status" = "Disabled" ];then
+		return 
+	fi
+	while true ; do
+		echo "enalbed selinux feature may reflect with docker."
+		read -p "Do you want to disable selinux?[(y/yes)/(n/no)]:" ans
+		ans="$(echo "$ans" | tr '[:upper:]' '[:lower:]')"
+		case "$ans"  in 
+			y|yes)
+			setenforce 0 || true
+			sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' \
+			/etc/selinux/config
+			break
+			;;
+			n|no)
+			exit 1
+			;;
+			*)
+			;; 
+		esac
+	done
 }
 centos6_binary_install(){
 ###install  docker  binary  to  /usr/local/bin  directory ###
+[ -e /usr/local/bin/docker ]  &&  mv -f /usr/local/bin/docker /usr/local/bin/docker.old
 pkg="https://get.docker.com/builds/Linux/x86_64/docker-latest.tgz"
 curl -SL "$pkg" | tar -C / -zxvf -
 
@@ -130,12 +135,17 @@ post-start script
 	fi
 end script
 EOF
-
-start  docker  
+####use latest binary ,start docker daemon ###
+if status docker|grep -q 'start' ;then
+	restart docker
+else
+	start  docker  
+fi
 }
 
 centos7_binary_install(){
 ###install  docker  binary  to  /usr/local/bin  directory ###
+[ -e /usr/local/bin/docker ]  &&  mv -f /usr/local/bin/docker /usr/local/bin/docker.old
 pkg="https://get.docker.com/builds/Linux/x86_64/docker-latest.tgz"
 curl -SL "$pkg" | tar -C / -zxvf -
 
@@ -182,21 +192,21 @@ systemctl  enable docker
 }
 
 centos6_install(){
-   local epelpkg="http://download.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm"
-   if  ! rpm -q epel-release ;then
-	   rpm -Uvh $epelpkg 
-   fi
-   rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-6 
-   yum makecache 
-   yum -y upgrade device-mapper-libs 
-   yum -y install docker-io 
-   service docker start 
-   chkconfig docker on
+	local epelpkg="http://download.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm"
+	if  ! rpm -q epel-release ;then
+		rpm -Uvh $epelpkg 
+	fi
+	rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-6 
+	yum makecache 
+	yum -y upgrade device-mapper-libs 
+	yum -y install docker-io 
+	service docker start 
+	chkconfig docker on
 }
 centos7_install(){
-   yum -y install docker 
-   service docker start 
-   chkconfig docker on  
+	yum -y install docker 
+	service docker start 
+	chkconfig docker on  
 }
     
 url='https://get.docker.com/'
@@ -219,7 +229,7 @@ if command_exists docker || command_exists lxc-docker; then
 	echo >&2 'Warning: "docker" or "lxc-docker" command appears to already exist.'
 	echo >&2 'Please ensure that you do not already have docker installed.'
 	echo >&2 'You may press Ctrl+C now to abort this process and rectify this situation.'
-	( set -x; sleep 2 )
+	( set -x; sleep 20 )
 fi
 
 user="$(id -un 2>/dev/null || true)"
@@ -270,7 +280,7 @@ if [ -z "$lsb_dist" ] && [ -r /etc/os-release ]; then
 fi
 
 lsb_dist="$(echo "$lsb_dist" | tr '[:upper:]' '[:lower:]')"
-echo "lsb =$lsb_dist"
+#echo "lsb =$lsb_dist"
 
 case "$lsb_dist" in
 	amzn|fedora)
@@ -309,11 +319,11 @@ case "$lsb_dist" in
 		if num_cmp $ver '>=' '6.5' && num_cmp $ver '<' '7.0' ;then
 			disable_selinux
 			( centos6_binary_install )
-	        elif num_cmp $ver '>=' '7.0' ;then
+			elif num_cmp $ver '>=' '7.0' ;then
 			disable_selinux
 			( centos7_binary_install )
 		else
-		     echo "your centos version is lower 6.5" && exit 1
+			echo "your centos version is lower 6.5" && exit 1
 		fi
 		if command_exists docker && [ -e /var/run/docker.sock ]; then
 			(
@@ -328,6 +338,7 @@ case "$lsb_dist" in
 		export DEBIAN_FRONTEND=noninteractive
 
 		did_apt_get_update=
+[ -e /usr/local/bin/docker ]  &&  mv /usr/local/bin/docker /usr/local/bin/docker.old
 		apt_get_update() {
 			if [ -z "$did_apt_get_update" ]; then
 				( set -x; $sh_c 'sleep 3; apt-get update' )
