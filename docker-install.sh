@@ -25,9 +25,163 @@ num_cmp(){
 	   return 1
    fi
 }
+disable_selinux(){
+  while true ; do
+      echo "enalbed selinux feature may reflect with docker."
+      read -p "Do you want to disable selinux?[(y/yes)/(n/no)]:" ans
+      ans="$(echo "$ans" | tr '[:upper:]' '[:lower:]')"
+      case "$ans"  in 
+	y|yes)
+	   setenforce 0
+	   sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' \
+		   /etc/selinux/config
+	   break
+	   ;;
+	n|no)
+	   exit 1
+	   ;;
+	*)
+	   ;; 
+     esac
+  done
+}
+centos6_binary_install(){
+###install  docker  binary  to  /usr/local/bin  directory ###
+pkg="https://get.docker.com/builds/Linux/x86_64/docker-latest.tgz"
+curl -SL "$pkg" | tar -C / -zxvf -
+
+####generate  /etc/default/docker  file #####
+echo "generating  /etc/default/docker file ......"
+cat  > /etc/default/docker  <<'EOF'
+# Docker Upstart and SysVinit configuration file
+
+# Customize location of Docker binary (especially for development testing).
+#DOCKER="/usr/local/bin/docker"
+
+# Use DOCKER_OPTS to modify the daemon startup options.
+#DOCKER_OPTS="--dns 8.8.8.8 --dns 8.8.4.4"
+
+# If you need Docker to use an HTTP proxy, it can also be specified here.
+#export http_proxy="http://127.0.0.1:3128/"
+
+# This is also a handy place to tweak where Docker's temporary files go.
+#export TMPDIR="/mnt/bigdrive/docker-tmp"
+EOF
+
+###generate  upstart job  /etc/init/docker.conf ###
+echo "generating  /etc/init/docker.conf  upstart job....."
+cat  > /etc/init/docker.conf  <<'EOF'
+description "Docker daemon"
+
+start on runlevel [23]
+stop on runlevel [!2345]
+limit nofile 524288 1048576
+limit nproc 524288 1048576
+
+respawn
+
+pre-start script
+	if grep -v '^#' /etc/fstab | grep -q cgroup \
+		|| [ ! -e /proc/cgroups ] ; then
+		exit 0
+	fi
+	[ ! -e /cgroup ] &&  mkdir /cgroup
+	if ! mountpoint -q /cgroup; then
+		mount -t tmpfs -o uid=0,gid=0,mode=0755 cgroup  /cgroup
+	fi
+	(
+	        set -x 
+		cd /cgroup
+		for sys in $(awk '!/^#/ { if ($4 == 1) print $1 }' /proc/cgroups); do
+			mkdir -p $sys
+			if ! mountpoint -q $sys; then
+				if ! mount -n -t cgroup -o $sys cgroup $sys; then
+					rmdir $sys || true
+				fi
+			fi
+		done
+	)
+end script
+
+script
+	# modify these in /etc/default/$UPSTART_JOB (/etc/default/docker)
+	DOCKER=/usr/local/bin/$UPSTART_JOB
+	DOCKER_OPTS=
+	if [ -f /etc/default/$UPSTART_JOB ]; then
+		. /etc/default/$UPSTART_JOB
+	fi
+	exec "$DOCKER" -d $DOCKER_OPTS
+end script
+
+# Don't emit "started" event until docker.sock is ready.
+# See https://github.com/docker/docker/issues/6647
+post-start script
+	DOCKER_OPTS=
+	if [ -f /etc/default/$UPSTART_JOB ]; then
+		. /etc/default/$UPSTART_JOB
+	fi
+	if ! printf "%s" "$DOCKER_OPTS" | grep -qE -e '-H|--host'; then
+		while ! [ -e /var/run/docker.sock ]; do
+			initctl status $UPSTART_JOB | grep -q "stop/" && exit 1
+			echo "Waiting for /var/run/docker.sock"
+			sleep 0.1
+		done
+		echo "/var/run/docker.sock is up"
+	fi
+end script
+EOF
+
+start  docker  
+}
+
+centos7_binary_install(){
+###install  docker  binary  to  /usr/local/bin  directory ###
+pkg="https://get.docker.com/builds/Linux/x86_64/docker-latest.tgz"
+curl -SL "$pkg" | tar -C / -zxvf -
+
+echo "installing docker.service file to  /etc/systemd/system/"
+
+cat  >  /etc/systemd/system/docker.service  <<'EOF'
+[Unit]
+Description=Docker Application Container Engine
+Documentation=http://docs.docker.com
+After=network.target docker.socket
+Requires=docker.socket
+
+[Service]
+ExecStart=/usr/local/bin/docker -d -H fd://
+MountFlags=slave
+LimitNOFILE=1048576
+LimitNPROC=1048576
+LimitCORE=infinity
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo "installing  docker.socket to /etc/systemd/system/"
+
+cat > /etc/systemd/system/docker.socket <<'EOF'
+[Unit]
+Description=Docker Socket for the API
+PartOf=docker.service
+
+[Socket]
+ListenStream=/var/run/docker.sock
+SocketMode=0660
+SocketUser=root
+SocketGroup=docker
+
+[Install]
+WantedBy=sockets.target
+EOF
+
+systemctl  daemon-reload
+systemctl  start  docker
+systemctl  enable docker
+}
 
 centos6_install(){
-   #local epel_pkg="http://mirrors.ustc.edu.cn/fedora/epel/6/x86_64/epel-release-6-8.noarch.rpm"
    local epelpkg="http://download.fedoraproject.org/pub/epel/6/x86_64/epel-release-6-8.noarch.rpm"
    if  ! rpm -q epel-release ;then
 	   rpm -Uvh $epelpkg 
@@ -153,9 +307,11 @@ case "$lsb_dist" in
 	centos*)
 		ver=${lsb_dist#centos-}
 		if num_cmp $ver '>=' '6.5' && num_cmp $ver '<' '7.0' ;then
-			( centos6_install )
+			disable_selinux
+			( centos6_binary_install )
 	        elif num_cmp $ver '>=' '7.0' ;then
-			( centos7_install )
+			disable_selinux
+			( centos7_binary_install )
 		else
 		     echo "your centos version is lower 6.5" && exit 1
 		fi
