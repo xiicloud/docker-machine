@@ -381,6 +381,8 @@ install_docker() {
       if command_exists docker && [ -e /var/run/docker.sock ]; then
         $SH_C 'docker version'
       fi
+      $SH_C 'service docker start' || true
+      $SH_C 'docker version'
       your_user=your-user
       [ "$USER" != 'root' ] && your_user="$USER"
       echo
