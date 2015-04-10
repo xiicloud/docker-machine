@@ -61,7 +61,8 @@ get_bool_choice() {
 
 get_str_param() {
   local str
-  read -p "$1 [$2]:"  str
+  local prompt="$1${2:+ [${2}]}: "
+  read -p "$prompt"  str
   echo $str
 }
 
@@ -105,6 +106,14 @@ check_docker_version() {
 
 prepare_csphere() {
   if [ -z "$AUTH_KEY" ]; then
+    echo
+    echo -ne "\e[31m"
+    echo "An auth token is required to secure the network communication between "
+    echo "agents and controller."
+    echo "If you're installing agent, you must ensure that the token here is the same"
+    echo "as what you had provided when installing the controller."
+    echo -ne "\e[0m"
+    echo
     echo -ne "\e[32m"
     AUTH_KEY=$(get_str_param "Please input the auth token" "$DEFAULT_AUTH_KEY")
     echo -ne "\e[0m"
@@ -148,7 +157,7 @@ install_csphere_agent() {
   if [ -z "$CONTROLLER_IP" ]; then
     while true; do
       echo -ne "\e[32m"
-      CONTROLLER_IP=$(get_str_param "Please input the IP of the controller", "")
+      CONTROLLER_IP=$(get_str_param "Please input the IP address of the controller")
       echo -ne "\e[0m"
       [ -n "$CONTROLLER_IP" ] && break
     done
@@ -511,7 +520,7 @@ echo -e "\e[33mThe controller should be installed before the agent.\e[0m"
 declare -l ROLE
 while true; do
   echo -ne "\e[32m"
-  ROLE=$(get_str_param "Please input the role that you want to install." "")
+  ROLE=$(get_str_param "Please input the role that you want to install")
   echo -ne "\e[0m"
   [ "$ROLE" = "controller" -o "$ROLE" = "agent" ] && break
 done
