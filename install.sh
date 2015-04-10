@@ -9,6 +9,7 @@ HAS_DOCKER=true
 DOCKER_REPO_URL=https://get.docker.com
 DEFAULT_AUTH_KEY="your-secret-key"
 DEFAULT_DATA_PATH="/data/csphere"
+CSPHERE_IMAGE=${CSPHERE_IMAGE:-"csphere/csphere"}
 
 command_exists() {
   command -v "$@" > /dev/null 2>&1
@@ -136,7 +137,7 @@ prepare_csphere() {
   if command_exists chcon; then
     $SH_C "chcon -Rt svirt_sandbox_file_t $DATA_DIR >/dev/null 2>&1" || true
   fi
-  $SH_C 'docker pull csphere/csphere'
+  $SH_C "docker pull $CSPHERE_IMAGE"
 }
 
 install_csphere_controller() {
@@ -149,7 +150,7 @@ install_csphere_controller() {
     -p 1016:80 \
     -e ROLE=controller \
     -e AUTH_KEY=$AUTH_KEY \
-    csphere/csphere"
+    $CSPHERE_IMAGE"
 }
 
 install_csphere_agent() {
@@ -171,7 +172,7 @@ install_csphere_agent() {
     -v /proc:/rootfs/proc:ro \
     -v /sys:/sys:ro \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    --net=host csphere/csphere"
+    --net=host $CSPHERE_IMAGE"
 }
 
 centos6_binary_install() {
