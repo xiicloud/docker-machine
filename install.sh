@@ -1,6 +1,12 @@
 #!/bin/bash
 set -e -o pipefail
 
+# Supported environment variables:
+#  AUTH_KEY
+#  ROLE
+#  CONTROLLER_IP
+#  DATA_DIR
+
 DOCKER_CMD=
 DOCKER_VERSION_OK=false
 UPGRADE_DOCKER=false
@@ -8,7 +14,7 @@ UPGRADE_CSPHERE=false
 HAS_DOCKER=true
 DOCKER_REPO_URL=https://get.docker.com
 DEFAULT_AUTH_KEY="your-secret-key"
-DEFAULT_DATA_PATH="/data/csphere"
+DEFAULT_DATA_DIR="/data/csphere"
 CSPHERE_IMAGE=${CSPHERE_IMAGE:-"csphere/csphere"}
 
 command_exists() {
@@ -123,15 +129,15 @@ prepare_csphere() {
     AUTH_KEY="$DEFAULT_AUTH_KEY"
   fi
 
-  DATA_DIR=/data/csphere
-  if [ -z "$DATA_DIR" ]; then
-    echo -ne "\e[32m"
-    DATA_DIR=$(get_str_param "Please input the data path" "$DEFAULT_DATA_PATH")
-    echo -ne "\e[0m"
-  fi
-  if [ -z "$DATA_DIR" ]; then
-    DATA_DIR=$DEFAULT_DATA_PATH
-  fi
+  DATA_DIR=${DATA_DIR:-$DEFAULT_DATA_DIR}
+  # if [ -z "$DATA_DIR" ]; then
+  #   echo -ne "\e[32m"
+  #   DATA_DIR=$(get_str_param "Please input the data path" "$DEFAULT_DATA_DIR")
+  #   echo -ne "\e[0m"
+  # fi
+  # if [ -z "$DATA_DIR" ]; then
+  #   DATA_DIR=$DEFAULT_DATA_DIR
+  # fi
 
   $SH_C "[ -d $DATA_DIR ] || mkdir -p $DATA_DIR"
   if command_exists chcon; then
@@ -520,13 +526,15 @@ echo "============= install cSphere ==========="
 echo "cSphere has 2 components: controller and agent."
 echo -e "\e[33mThe controller should be installed before the agent.\e[0m"
 
-declare -l ROLE
-while true; do
-  echo -ne "\e[32m"
-  ROLE=$(get_str_param "Please input the role that you want to install")
-  echo -ne "\e[0m"
-  [ "$ROLE" = "controller" -o "$ROLE" = "agent" ] && break
-done
+if [ -z "$ROLE" ] || [ $ROLE != "controller" -a $ROLE != "agent" ]; then
+  declare -l ROLE
+  while true; do
+    echo -ne "\e[32m"
+    ROLE=$(get_str_param "Please input the role that you want to install")
+    echo -ne "\e[0m"
+    [ "$ROLE" = "controller" -o "$ROLE" = "agent" ] && break
+  done
+fi
 
 if [ "$ROLE" = "controller" ]; then
   install_csphere_controller
