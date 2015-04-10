@@ -1,1 +1,2 @@
-Docker host initializing tools.
+# cSphere 自动安装脚本
+使用方法： 直接运行，根据提示输入相关参数即可
