@@ -1,11 +1,14 @@
 #!/bin/bash
 set -e -o pipefail
 
+# A tool for installing Docker and the cSphere product.
+# The Docker installation part is borrowied from http://get.docker.com/
+#
 # Supported environment variables:
-#  AUTH_KEY
-#  ROLE
-#  CONTROLLER_IP
-#  DATA_DIR
+#   AUTH_KEY
+#   ROLE
+#   CONTROLLER_IP
+#   DATA_DIR
 
 DOCKER_CMD=
 DOCKER_VERSION_OK=false
@@ -181,13 +184,13 @@ install_csphere_agent() {
     --net=host $CSPHERE_IMAGE"
 }
 
-centos6_binary_install() {
-  # install  docker  binary  to  /usr/local/bin  directory ###
+install_docker_centos6() {
+  # install docker binary to /usr/local/bin directory
   [ -e /usr/local/bin/docker ]  &&  $SH_C 'mv -f /usr/local/bin/docker /usr/local/bin/docker.old'
   local pkg="${DOCKER_REPO_URL}/builds/Linux/x86_64/docker-latest.tgz"
   curl -SL "$pkg" | $SH_C 'tar -C / -zxvf -'
 
-  # generate  /etc/default/docker  file #####
+  # generate /etc/default/docker file
   echo "generating  /etc/default/docker file ......"
   cat  > /tmp/docker.default  <<'EOF'
 # Docker Upstart and SysVinit configuration file
@@ -206,7 +209,7 @@ centos6_binary_install() {
 EOF
   [ -f /etc/default/docker ] || $SH_C 'mv /tmp/docker.default /etc/default/docker'
 
-  ###generate  upstart job  /etc/init/docker.conf ###
+  # generate upstart job /etc/init/docker.conf
   echo "generating  /etc/init/docker.conf  upstart job....."
   cat  > /tmp/docker.conf  <<'EOF'
 description "Docker daemon"
@@ -269,7 +272,7 @@ post-start script
 end script
 EOF
   $SH_C 'mv /tmp/docker.conf /etc/init/docker.conf'
-  ####use latest binary ,start docker daemon ###
+  # use latest binary, start docker daemon
   if $SH_C 'status docker'|grep -q 'start' ;then
     $SH_C 'restart docker'
   else
@@ -277,8 +280,8 @@ EOF
   fi
 }
 
-centos7_binary_install() {
-  ###install  docker  binary  to  /usr/local/bin  directory ###
+install_docker_centos7() {
+  # install docker binary to /usr/local/bin
   [ -e /usr/local/bin/docker ]  &&  $SH_C 'mv -f /usr/local/bin/docker /usr/local/bin/docker.old'
   local pkg="${DOCKER_REPO_URL}/builds/Linux/x86_64/docker-latest.tgz"
   curl -SL "$pkg" | $SH_C 'tar -C / -zxvf -'
@@ -404,9 +407,9 @@ install_docker() {
     centos*)
       ver=${lsb_dist#centos-}
       if num_cmp $ver '>=' '6.5' && num_cmp $ver '<' '7.0'; then
-        centos6_binary_install
+        install_docker_centos6
       elif num_cmp $ver '>=' '7.0' ;then
-        centos7_binary_install
+        install_docker_centos7
       else
         echo "Your system is not supported by Docker." && exit 1
       fi
