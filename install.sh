@@ -529,7 +529,7 @@ echo "============= install cSphere ==========="
 echo "cSphere has 2 components: controller and agent."
 echo -e "\e[33mThe controller should be installed before the agent.\e[0m"
 
-if [ -z "$ROLE" ] || [ $ROLE != "controller" -a $ROLE != "agent" ]; then
+if [ "$ROLE" != "controller" -a "$ROLE" != "agent" ]; then
   declare -l ROLE
   while true; do
     echo -ne "\e[32m"
