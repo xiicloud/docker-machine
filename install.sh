@@ -18,7 +18,9 @@ HAS_DOCKER=true
 DOCKER_REPO_URL=https://get.docker.com
 DEFAULT_AUTH_KEY="your-secret-key"
 DEFAULT_DATA_DIR="/data/csphere"
-CSPHERE_IMAGE=${CSPHERE_IMAGE:-"csphere/csphere"}
+#CSPHERE_IMAGE=${CSPHERE_IMAGE:-"csphere/csphere"}
+
+CSPHERE_IMAGE=http://csphere-image.stor.sinaapp.com/csphere.tar.gz
 
 command_exists() {
   command -v "$@" > /dev/null 2>&1
@@ -38,6 +40,17 @@ if [ "$USER" != 'root' ]; then
     exit 1
   fi
 fi
+
+curl=''
+if command_exists curl; then
+  curl='curl -sSL'
+elif command_exists wget; then
+  curl='wget -qO-'
+elif command_exists busybox && busybox --list-modules | grep -q wget; then
+  curl='busybox wget -qO-'
+fi
+
+trap 'echo -ne "\e[0m"' EXIT
 
 num_cmp(){
   if [ $# -lt  3 ];then
@@ -146,7 +159,13 @@ prepare_csphere() {
   if command_exists chcon; then
     $SH_C "chcon -Rt svirt_sandbox_file_t $DATA_DIR >/dev/null 2>&1" || true
   fi
-  $SH_C "docker pull $CSPHERE_IMAGE"
+
+  if echo $CSPHERE_IMAGE|grep -q http; then
+    wget -qO- $CSPHERE_IMAGE|$SH_C 'docker load'
+    CSPHERE_IMAGE=csphere/csphere:$($curl https://csphere.cn/docs/latest-version.txt)
+  else
+    $SH_C "docker pull $CSPHERE_IMAGE"
+  fi
 }
 
 install_csphere_controller() {
@@ -188,7 +207,7 @@ install_docker_centos6() {
   # install docker binary to /usr/local/bin directory
   [ -e /usr/local/bin/docker ]  &&  $SH_C 'mv -f /usr/local/bin/docker /usr/local/bin/docker.old'
   local pkg="${DOCKER_REPO_URL}/builds/Linux/x86_64/docker-latest.tgz"
-  curl -SL "$pkg" | $SH_C 'tar -C / -zxvf -'
+  $curl "$pkg" | $SH_C 'tar -C / -zxvf -'
 
   # generate /etc/default/docker file
   echo "generating  /etc/default/docker file ......"
@@ -284,7 +303,7 @@ install_docker_centos7() {
   # install docker binary to /usr/local/bin
   [ -e /usr/local/bin/docker ]  &&  $SH_C 'mv -f /usr/local/bin/docker /usr/local/bin/docker.old'
   local pkg="${DOCKER_REPO_URL}/builds/Linux/x86_64/docker-latest.tgz"
-  curl -SL "$pkg" | $SH_C 'tar -C / -zxvf -'
+  $curl "$pkg" | $SH_C 'tar -C / -zxvf -'
 
   echo "installing docker.service file to  /etc/systemd/system/"
 
@@ -339,15 +358,6 @@ install_docker() {
       exit 1
       ;;
   esac
-
-  curl=''
-  if command_exists curl; then
-    curl='curl -sSL'
-  elif command_exists wget; then
-    curl='wget -qO-'
-  elif command_exists busybox && busybox --list-modules | grep -q wget; then
-    curl='busybox wget -qO-'
-  fi
 
   # perform some very rudimentary platform detection
   lsb_dist=''
@@ -405,6 +415,7 @@ install_docker() {
       ;;
     
     centos*)
+      [ -n "$curl" ] || $SH_C 'yum install -yq curl'
       ver=${lsb_dist#centos-}
       if num_cmp $ver '>=' '6.5' && num_cmp $ver '<' '7.0'; then
         install_docker_centos6
