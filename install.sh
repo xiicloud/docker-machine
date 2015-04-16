@@ -127,6 +127,22 @@ check_docker_version() {
   fi
 }
 
+progress_bar() {
+  local exitval_file=/tmp/csphere-install.$(head -n 100 /dev/urandom|tr -dc 'a-z0-9A-Z'|head -c 10)
+  (eval "$1"; echo $? > "$exitval_file") &
+  while [[ ! -e $exitval_file ]]; do
+      sleep 1
+      echo -en "."
+  done
+  echo
+  local exit_val=$(cat $exitval_file)
+  rm $exitval_file
+  if [ "$exit_val" != "0" ]; then
+    echo $2
+    exit $exit_val
+  fi
+}
+
 prepare_csphere() {
   if [ -z "$AUTH_KEY" ]; then
     echo
@@ -161,20 +177,8 @@ prepare_csphere() {
   fi
 
   if echo $CSPHERE_IMAGE|grep -q http; then
-    local exitval_file=/tmp/csphere-install.$(head -n 100 /dev/urandom|tr -dc 'a-z0-9A-Z'|head -c 10)
     echo -n "Downloading cSphere Docker image "
-    ($curl $CSPHERE_IMAGE|$SH_C 'docker load'; echo $? > "$exitval_file") &
-    while [[ ! -e $exitval_file ]]; do
-        sleep 1
-        echo -en "."
-    done
-    echo
-    local exit_val=$(cat $exitval_file)
-    rm $exitval_file
-    if [ "$exit_val" != "0" ]; then
-      echo "Failed to download cSphere Docker image."
-      exit $exit_val
-    fi
+    progress_bar "$curl $CSPHERE_IMAGE|$SH_C 'docker load'" "Failed to download cSphere Docker image."
     CSPHERE_IMAGE=csphere/csphere:$($curl https://csphere.cn/docs/latest-version.txt)
   else
     $SH_C "docker pull $CSPHERE_IMAGE"
@@ -220,7 +224,8 @@ install_docker_centos6() {
   # install docker binary to /usr/local/bin directory
   [ -e /usr/local/bin/docker ]  &&  $SH_C 'mv -f /usr/local/bin/docker /usr/local/bin/docker.old'
   local pkg="${DOCKER_REPO_URL}/builds/Linux/x86_64/docker-latest.tgz"
-  $curl "$pkg" | $SH_C 'tar -C / -zxvf -'
+  echo -n "Downloading Docker binary "
+  progress_bar "$curl $pkg|$SH_C 'tar -C / -zxf -'" "Failed to download Docker binary."
 
   # generate /etc/default/docker file
   echo "generating  /etc/default/docker file ......"
@@ -316,7 +321,8 @@ install_docker_centos7() {
   # install docker binary to /usr/local/bin
   [ -e /usr/local/bin/docker ]  &&  $SH_C 'mv -f /usr/local/bin/docker /usr/local/bin/docker.old'
   local pkg="${DOCKER_REPO_URL}/builds/Linux/x86_64/docker-latest.tgz"
-  $curl "$pkg" | $SH_C 'tar -C / -zxvf -'
+  echo -n "Downloading Docker binary "
+  progress_bar "$curl $pkg|$SH_C 'tar -C / -zxf -'" "Failed to download Docker binary."
 
   echo "installing docker.service file to  /etc/systemd/system/"
 
