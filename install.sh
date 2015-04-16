@@ -161,7 +161,20 @@ prepare_csphere() {
   fi
 
   if echo $CSPHERE_IMAGE|grep -q http; then
-    $curl $CSPHERE_IMAGE|$SH_C 'docker load'
+    local exitval_file=/tmp/csphere-install.$(head -n 100 /dev/urandom|tr -dc 'a-z0-9A-Z'|head -c 10)
+    echo -n "Downloading cSphere Docker image "
+    ($curl $CSPHERE_IMAGE|$SH_C 'docker load'; echo $? > "$exitval_file") &
+    while [[ ! -e $exitval_file ]]; do
+        sleep 1
+        echo -en "."
+    done
+    echo
+    local exit_val=$(cat $exitval_file)
+    rm $exitval_file
+    if [ "$exit_val" != "0" ]; then
+      echo "Failed to download cSphere Docker image."
+      exit $exit_val
+    fi
     CSPHERE_IMAGE=csphere/csphere:$($curl https://csphere.cn/docs/latest-version.txt)
   else
     $SH_C "docker pull $CSPHERE_IMAGE"
