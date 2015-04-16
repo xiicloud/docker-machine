@@ -161,7 +161,7 @@ prepare_csphere() {
   fi
 
   if echo $CSPHERE_IMAGE|grep -q http; then
-    wget -qO- $CSPHERE_IMAGE|$SH_C 'docker load'
+    $curl $CSPHERE_IMAGE|$SH_C 'docker load'
     CSPHERE_IMAGE=csphere/csphere:$($curl https://csphere.cn/docs/latest-version.txt)
   else
     $SH_C "docker pull $CSPHERE_IMAGE"
