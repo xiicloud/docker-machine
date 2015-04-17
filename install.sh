@@ -18,6 +18,7 @@ HAS_DOCKER=true
 DOCKER_REPO_URL=https://get.docker.com
 DEFAULT_AUTH_KEY="your-secret-key"
 DEFAULT_DATA_DIR="/data/csphere"
+CONTROLLER_PORT=${CONTROLLER_PORT:-1016}
 #CSPHERE_IMAGE=${CSPHERE_IMAGE:-"csphere/csphere"}
 
 CSPHERE_IMAGE=http://csphere-image.stor.sinaapp.com/csphere.tar.gz
@@ -187,12 +188,12 @@ prepare_csphere() {
 
 install_csphere_controller() {
   prepare_csphere
-  $SH_C '/sbin/iptables -I INPUT -p tcp --dport 1016 -j ACCEPT'
+  $SH_C "/sbin/iptables -I INPUT -p tcp --dport $CONTROLLER_PORT -j ACCEPT"
   $SH_C 'docker stop -t 600 csphere-controller 2>/dev/null || true'
   $SH_C 'docker rm csphere-controller 2>/dev/null || true'
   $SH_C "docker run -d --restart=always --name=csphere-controller \
     -v $DATA_DIR:/data:rw \
-    -p 1016:80 \
+    -p $CONTROLLER_PORT:80 \
     -e ROLE=controller \
     -e AUTH_KEY=$AUTH_KEY \
     $CSPHERE_IMAGE"
@@ -211,7 +212,7 @@ install_csphere_agent() {
   
   $SH_C 'docker rm -f csphere-agent 2>/dev/null || true'
   $SH_C "docker run -d --restart=always --name=csphere-agent -e ROLE=agent \
-    -e CONTROLLER_ADDR=$CONTROLLER_IP:1016 \
+    -e CONTROLLER_ADDR=$CONTROLLER_IP:$CONTROLLER_PORT \
     -e AUTH_KEY=$AUTH_KEY \
     -v $DATA_DIR:/data:rw \
     -v /proc:/rootfs/proc:ro \
