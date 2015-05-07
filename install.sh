@@ -1,6 +1,4 @@
-#!/bin/bash
-set -e -o pipefail
-
+#!/bin/sh
 # A tool for installing Docker and the cSphere product.
 # The Docker installation part is borrowied from http://get.docker.com/
 #
@@ -10,13 +8,20 @@ set -e -o pipefail
 #   CONTROLLER_IP
 #   DATA_DIR
 
+set -e
+# Determine the shell. See http://unix.stackexchange.com/a/37844
+if ps h -p $$ -o args=''|cut -f1 -d' '|grep -q bash; then
+  set -o pipefail
+elif [ -x /bin/bash ]; then
+  exec /bin/bash $0
+fi
+
 DOCKER_CMD=
 DOCKER_VERSION_OK=false
 UPGRADE_DOCKER=false
 UPGRADE_CSPHERE=false
 HAS_DOCKER=true
 DOCKER_REPO_URL=https://get.docker.com
-DEFAULT_AUTH_KEY="your-secret-key"
 DEFAULT_DATA_DIR="/data/csphere"
 CONTROLLER_PORT=${CONTROLLER_PORT:-1016}
 #CSPHERE_IMAGE=${CSPHERE_IMAGE:-"csphere/csphere"}
@@ -145,7 +150,7 @@ progress_bar() {
 }
 
 prepare_csphere() {
-  if [ -z "$AUTH_KEY" ]; then
+  if [ "$ROLE" = "agent" -a -z "$AUTH_KEY" ]; then
     echo
     echo -ne "\e[31m"
     echo "An auth token is required to secure the network communication between "
@@ -155,11 +160,10 @@ prepare_csphere() {
     echo -ne "\e[0m"
     echo
     echo -ne "\e[32m"
-    AUTH_KEY=$(get_str_param "Please input the auth token" "$DEFAULT_AUTH_KEY")
+    while [ -z "$AUTH_KEY" ]; do
+      AUTH_KEY=$(get_str_param "Please input the auth token")
+    done
     echo -ne "\e[0m"
-  fi
-  if [ -z "$AUTH_KEY" ]; then
-    AUTH_KEY="$DEFAULT_AUTH_KEY"
   fi
 
   DATA_DIR=${DATA_DIR:-$DEFAULT_DATA_DIR}
@@ -188,7 +192,7 @@ prepare_csphere() {
 
 install_csphere_controller() {
   prepare_csphere
-  $SH_C "/sbin/iptables -I INPUT -p tcp --dport $CONTROLLER_PORT -j ACCEPT"
+  $SH_C "/sbin/iptables -I INPUT -p tcp --dport $CONTROLLER_PORT -j ACCEPT > /dev/null 2>&1 || true"
   $SH_C 'docker stop -t 600 csphere-controller 2>/dev/null || true'
   $SH_C 'docker rm csphere-controller 2>/dev/null || true'
   $SH_C "docker run -d --restart=always --name=csphere-controller \
