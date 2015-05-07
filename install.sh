@@ -34,17 +34,9 @@ command_exists() {
 
 USER="$(id -un 2>/dev/null || true)"
 
-SH_C='sh -c'
 if [ "$USER" != 'root' ]; then
-  if command_exists sudo; then
-    SH_C='sudo -E sh -c'
-  elif command_exists su; then
-    SH_C='su -c'
-  else
-    echo >&2 'Error: this installer needs the ability to run commands as root.'
-    echo >&2 'We are unable to find either "sudo" or "su" available to make this happen.'
-    exit 1
-  fi
+  echo >&2 "This script must be run as root."
+  exit 1
 fi
 
 curl=''
@@ -110,7 +102,7 @@ get_docker_cmd() {
 check_docker_version() {
   local ask_upgrade=false
   local must_upgrade=false
-  local ver=$($SH_C "$DOCKER_CMD version"|grep 'Server version'|cut -d ' ' -f 3|awk -F '.' '{print $1"."$2}')
+  local ver=$($DOCKER_CMD version|grep 'Server version'|cut -d ' ' -f 3|awk -F '.' '{print $1"."$2}')
   if num_cmp $ver "<" 1.3; then
     echo "Your Docker version is not supported."
     ask_upgrade=true
@@ -176,31 +168,31 @@ prepare_csphere() {
   #   DATA_DIR=$DEFAULT_DATA_DIR
   # fi
 
-  $SH_C "[ -d $DATA_DIR ] || mkdir -p $DATA_DIR"
+  [ -d $DATA_DIR ] || mkdir -p $DATA_DIR
   if command_exists chcon; then
-    $SH_C "chcon -Rt svirt_sandbox_file_t $DATA_DIR >/dev/null 2>&1" || true
+    chcon -Rt svirt_sandbox_file_t $DATA_DIR >/dev/null 2>&1 || true
   fi
 
   if echo $CSPHERE_IMAGE|grep -q http; then
     echo -n "Downloading cSphere Docker image "
-    progress_bar "$curl $CSPHERE_IMAGE|$SH_C 'docker load'" "Failed to download cSphere Docker image."
+    progress_bar "$curl $CSPHERE_IMAGE|docker load" "Failed to download cSphere Docker image."
     CSPHERE_IMAGE=csphere/csphere:$($curl https://csphere.cn/docs/latest-version.txt)
   else
-    $SH_C "docker pull $CSPHERE_IMAGE"
+    docker pull $CSPHERE_IMAGE
   fi
 }
 
 install_csphere_controller() {
   prepare_csphere
-  $SH_C "/sbin/iptables -I INPUT -p tcp --dport $CONTROLLER_PORT -j ACCEPT > /dev/null 2>&1 || true"
-  $SH_C 'docker stop -t 600 csphere-controller 2>/dev/null || true'
-  $SH_C 'docker rm csphere-controller 2>/dev/null || true'
-  $SH_C "docker run -d --restart=always --name=csphere-controller \
+  /sbin/iptables -I INPUT -p tcp --dport $CONTROLLER_PORT -j ACCEPT > /dev/null 2>&1 || true
+  docker stop -t 600 csphere-controller 2>/dev/null || true
+  docker rm csphere-controller 2>/dev/null || true
+  docker run -d --restart=always --name=csphere-controller \
     -v $DATA_DIR:/data:rw \
     -p $CONTROLLER_PORT:80 \
     -e ROLE=controller \
     -e AUTH_KEY=$AUTH_KEY \
-    $CSPHERE_IMAGE"
+    $CSPHERE_IMAGE
 }
 
 install_csphere_agent() {
@@ -214,23 +206,23 @@ install_csphere_agent() {
     done
   fi
   
-  $SH_C 'docker rm -f csphere-agent 2>/dev/null || true'
-  $SH_C "docker run -d --restart=always --name=csphere-agent -e ROLE=agent \
+  docker rm -f csphere-agent 2>/dev/null || true
+  docker run -d --restart=always --name=csphere-agent -e ROLE=agent \
     -e CONTROLLER_ADDR=$CONTROLLER_IP:$CONTROLLER_PORT \
     -e AUTH_KEY=$AUTH_KEY \
     -v $DATA_DIR:/data:rw \
     -v /proc:/rootfs/proc:ro \
     -v /sys:/sys:ro \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    --net=host $CSPHERE_IMAGE"
+    --net=host $CSPHERE_IMAGE
 }
 
 install_docker_centos6() {
   # install docker binary to /usr/local/bin directory
-  [ -e /usr/local/bin/docker ]  &&  $SH_C 'mv -f /usr/local/bin/docker /usr/local/bin/docker.old'
+  [ -e /usr/local/bin/docker ]  &&  mv -f /usr/local/bin/docker /usr/local/bin/docker.old
   local pkg="${DOCKER_REPO_URL}/builds/Linux/x86_64/docker-latest.tgz"
   echo -n "Downloading Docker binary "
-  progress_bar "$curl $pkg|$SH_C 'tar -C / -zxf -'" "Failed to download Docker binary."
+  progress_bar "$curl $pkg|tar -C / -zxf -" "Failed to download Docker binary."
 
   # generate /etc/default/docker file
   echo "generating  /etc/default/docker file ......"
@@ -249,7 +241,7 @@ install_docker_centos6() {
 # This is also a handy place to tweak where Docker's temporary files go.
 #export TMPDIR="/mnt/bigdrive/docker-tmp"
 EOF
-  [ -f /etc/default/docker ] || $SH_C 'mv /tmp/docker.default /etc/default/docker'
+  [ -f /etc/default/docker ] || mv /tmp/docker.default /etc/default/docker
 
   # generate upstart job /etc/init/docker.conf
   echo "generating  /etc/init/docker.conf  upstart job....."
@@ -313,21 +305,21 @@ post-start script
   fi
 end script
 EOF
-  $SH_C 'mv /tmp/docker.conf /etc/init/docker.conf'
+  mv /tmp/docker.conf /etc/init/docker.conf
   # use latest binary, start docker daemon
-  if $SH_C 'status docker'|grep -q 'start' ;then
-    $SH_C 'restart docker'
+  if status docker|grep -q 'start' ;then
+    restart docker
   else
-    $SH_C 'start docker'
+    start docker
   fi
 }
 
 install_docker_centos7() {
   # install docker binary to /usr/local/bin
-  [ -e /usr/local/bin/docker ]  &&  $SH_C 'mv -f /usr/local/bin/docker /usr/local/bin/docker.old'
+  [ -e /usr/local/bin/docker ]  &&  mv -f /usr/local/bin/docker /usr/local/bin/docker.old
   local pkg="${DOCKER_REPO_URL}/builds/Linux/x86_64/docker-latest.tgz"
   echo -n "Downloading Docker binary "
-  progress_bar "$curl $pkg|$SH_C 'tar -C / -zxf -'" "Failed to download Docker binary."
+  progress_bar "$curl $pkg|tar -C / -zxf -" "Failed to download Docker binary."
 
   echo "installing docker.service file to  /etc/systemd/system/"
 
@@ -364,12 +356,11 @@ SocketGroup=docker
 [Install]
 WantedBy=sockets.target
 EOF
-  $SH_C '
-    mv /tmp/docker.socket /etc/systemd/system/
-    mv /tmp/docker.service /etc/systemd/system/
-    systemctl  daemon-reload
-    systemctl  restart docker
-    systemctl  enable docker'
+  mv /tmp/docker.socket /etc/systemd/system/
+  mv /tmp/docker.service /etc/systemd/system/
+  systemctl  daemon-reload
+  systemctl  restart docker
+  systemctl  enable docker
 }
 
 install_docker() {
@@ -413,19 +404,19 @@ install_docker() {
       if [ "$lsb_dist" = 'amzn' ]; then
         (
           set -x
-          $SH_C 'yum update -yq;yum -y -q install docker'
+          yum update -yq;yum -y -q install docker
         )
       else
         (
           set -x
-          $SH_C 'yum update -yq; yum -y -q install docker-io'
+          yum update -yq; yum -y -q install docker-io
         )
       fi
       if command_exists docker && [ -e /var/run/docker.sock ]; then
-        $SH_C 'docker version'
+        docker version
       fi
-      $SH_C 'service docker start' || true
-      $SH_C 'docker version'
+      service docker start || true
+      docker version
       your_user=your-user
       [ "$USER" != 'root' ] && your_user="$USER"
       echo
@@ -439,7 +430,7 @@ install_docker() {
       ;;
     
     centos*)
-      [ -n "$curl" ] || $SH_C 'yum install -yq curl'
+      [ -n "$curl" ] || yum install -yq curl
       ver=${lsb_dist#centos-}
       if num_cmp $ver '>=' '6.5' && num_cmp $ver '<' '7.0'; then
         install_docker_centos6
@@ -449,7 +440,7 @@ install_docker() {
         echo "Your system is not supported by Docker." && exit 1
       fi
       if command_exists docker && [ -e /var/run/docker.sock ]; then
-        $SH_C 'docker version'
+        docker version
       fi
       ;;
 
@@ -460,19 +451,19 @@ install_docker() {
       [ -e /usr/local/bin/docker ]  &&  mv /usr/local/bin/docker /usr/local/bin/docker.old
       apt_get_update() {
         if [ -z "$did_apt_get_update" ]; then
-          ( set -x; $SH_C 'apt-get update -yq' )
+          ( set -x; apt-get update -yq )
           did_apt_get_update=1
         fi
       }
 
       # aufs is preferred over devicemapper; try to ensure the driver is available.
-      if ! grep -q aufs /proc/filesystems && ! $SH_C 'modprobe aufs'; then
+      if ! grep -q aufs /proc/filesystems && ! modprobe aufs; then
         kern_extras="linux-image-extra-$(uname -r)"
 
         apt_get_update
-        ( set -x; $SH_C 'apt-get install -y -q '"$kern_extras" ) || true
+        ( set -x; apt-get install -y -q "$kern_extras" ) || true
 
-        if ! grep -q aufs /proc/filesystems && ! $SH_C 'modprobe aufs'; then
+        if ! grep -q aufs /proc/filesystems && ! modprobe aufs; then
           echo >&2 'Warning: tried to install '"$kern_extras"' (for AUFS)'
           echo >&2 ' but we still have no AUFS.  Docker may not work. Proceeding anyways!'
           ( set -x; sleep 10 )
@@ -487,27 +478,27 @@ install_docker() {
         else
           echo 'apparmor is enabled in the kernel, but apparmor_parser missing'
           apt_get_update
-          ( set -x; $SH_C 'apt-get install -y -q apparmor' )
+          ( set -x; apt-get install -y -q apparmor )
         fi
       fi
 
       if [ ! -e /usr/lib/apt/methods/https ]; then
         apt_get_update
-        ( set -x; $SH_C 'apt-get install -y -q apt-transport-https' )
+        ( set -x; apt-get install -y -q apt-transport-https )
       fi
       if [ -z "$curl" ]; then
         apt_get_update
-        ( set -x; $SH_C 'apt-get install -y -q curl' )
+        ( set -x; apt-get install -y -q curl )
         curl='curl -sSL'
       fi
       (
         set -x
-        $SH_C "apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 36A1D7869245C8950F966E92D8576A8BA88D21E9"
-        $SH_C "echo deb ${DOCKER_REPO_URL}/ubuntu docker main > /etc/apt/sources.list.d/docker.list"
-        $SH_C 'apt-get update -yq; apt-get install -y -q lxc-docker'
+        apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 36A1D7869245C8950F966E92D8576A8BA88D21E9
+        echo deb ${DOCKER_REPO_URL}/ubuntu docker main > /etc/apt/sources.list.d/docker.list
+        apt-get update -yq; apt-get install -y -q lxc-docker
       )
       if command_exists docker && [ -e /var/run/docker.sock ]; then
-        $SH_C 'docker version'
+        docker version
       fi
       your_user=your-user
       [ "$USER" != 'root' ] && your_user="$USER"
@@ -524,7 +515,7 @@ install_docker() {
     gentoo)
       (
         set -x
-        $SH_C 'emerge app-emulation/docker'
+        emerge app-emulation/docker
       )
       ;;
     
