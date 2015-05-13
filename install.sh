@@ -7,7 +7,7 @@
 #   ROLE
 #   CONTROLLER_IP
 #   DATA_DIR
-
+export PATH=$PATH:/usr/local/bin
 set -e
 # Determine the shell. See http://unix.stackexchange.com/a/37844
 if ps h -p $$ -o args=''|cut -f1 -d' '|grep -q bash; then
