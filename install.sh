@@ -173,10 +173,17 @@ prepare_csphere() {
     chcon -Rt svirt_sandbox_file_t $DATA_DIR >/dev/null 2>&1 || true
   fi
 
+  CSPHERE_VERSION=$($curl https://csphere.cn/docs/latest-version.txt)
+  if docker images|grep 'csphere/csphere'|grep -q $CSPHERE_VERSION; then
+    echo "cSphere Docker image existed "
+    CSPHERE_IMAGE=csphere/csphere:$CSPHERE_VERSION
+    return 0
+  fi
+
   if echo $CSPHERE_IMAGE|grep -q http; then
     echo -n "Downloading cSphere Docker image "
     progress_bar "$curl $CSPHERE_IMAGE|docker load" "Failed to download cSphere Docker image."
-    CSPHERE_IMAGE=csphere/csphere:$($curl https://csphere.cn/docs/latest-version.txt)
+    CSPHERE_IMAGE=csphere/csphere:$CSPHERE_VERSION
   else
     docker pull $CSPHERE_IMAGE
   fi
@@ -212,7 +219,7 @@ install_csphere_agent() {
     -e AUTH_KEY=$AUTH_KEY \
     -v $DATA_DIR:/data:rw \
     -v /proc:/rootfs/proc:ro \
-    -v /sys:/sys:ro \
+    -v /sys:/rootfs/sys:ro \
     -v /var/run/docker.sock:/var/run/docker.sock \
     --net=host $CSPHERE_IMAGE
 }
