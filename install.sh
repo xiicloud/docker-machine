@@ -28,7 +28,7 @@ ASSETS_URL=${ASSETS_URL:-"https://github.com/nicescale/docker-machine/archive/ma
 #CSPHERE_IMAGE=${CSPHERE_IMAGE:-"csphere/csphere"}
 
 CSPHERE_IMAGE=http://csphere-image.stor.sinaapp.com/csphere.tar.gz
-TMP_PATH=$(/tmp/csphere-install.$$)
+TMP_PATH=/tmp/csphere-install.$$
 
 command_exists() {
   command -v "$@" > /dev/null 2>&1
@@ -86,7 +86,7 @@ get_lsb_dist() {
     lsb_dist="$(. /etc/os-release && echo "$ID")"
   fi
 
-  lsb_dist="$(echo "$lsb_dist" | tr '[:upper:]' '[:lower:]')"
+  echo "$lsb_dist" | tr '[:upper:]' '[:lower:]'
 }
 
 num_cmp(){
@@ -262,7 +262,7 @@ install_csphere_agent() {
     ubuntu)
       local ver=$(. /etc/lsb-release; echo $DISTRIB_RELEASE)
       local ver_maj=$(echo $ver|cut -d '.' -f 1)
-      if [ ver_maj -gt 15 ]; then
+      if [ $ver_maj -gt 15 ]; then
         init_sys=systemd
       else
         init_sys=upstart
@@ -281,18 +281,21 @@ install_csphere_agent() {
       ;;
   esac
 
-  cat <-EOS >/etc/default/csphere
+  cat <<-EOS >/etc/default/csphere
 AUTH_KEY=$AUTH_KEY
 CONTROLLER_ADDR=$CONTROLLER_IP:$CONTROLLER_PORT
 EOS
-  $curl http://$CONTROLLER_IP:$CONTROLLER_PORT/api/_download >$TMP_PATH/csphere
+  local url=http://$CONTROLLER_IP:$CONTROLLER_PORT/api/_download
+  $curl $url >$TMP_PATH/csphere
   if [ -s $TMP_PATH/csphere ]; then
     mv $TMP_PATH/csphere /usr/bin/csphere
   fi
+  chmod +x /usr/bin/csphere
 
   case "$init_sys" in 
     upstart)
       mv $ASSETS_DIR/upstart/csphere-agent.conf /etc/init/
+      initctl start csphere-agent
       ;;
     systemd)
       mv $ASSETS_DIR/systemd/csphere-agent.service /etc/systemd/system
@@ -309,6 +312,7 @@ EOS
       elif command_exists update-rc.d; then
         update-rc.d csphere-agent enable
       fi
+      service csphere-agent start
       ;;
   esac
 }
