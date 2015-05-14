@@ -24,12 +24,19 @@ HAS_DOCKER=true
 DOCKER_REPO_URL=https://get.docker.com
 DEFAULT_DATA_DIR="/data/csphere"
 CONTROLLER_PORT=${CONTROLLER_PORT:-1016}
+ASSETS_URL=${ASSETS_URL:-"https://github.com/nicescale/docker-machine/archive/master.tar.gz"}
 #CSPHERE_IMAGE=${CSPHERE_IMAGE:-"csphere/csphere"}
 
 CSPHERE_IMAGE=http://csphere-image.stor.sinaapp.com/csphere.tar.gz
+TMP_PATH=$(/tmp/csphere-install.$$)
 
 command_exists() {
   command -v "$@" > /dev/null 2>&1
+}
+
+cleanup() {
+  echo -ne "\e[0m"
+  [ -d $TMP_PATH ] && rm -r $TMP_PATH
 }
 
 USER="$(id -un 2>/dev/null || true)"
@@ -48,7 +55,39 @@ elif command_exists busybox && busybox --list-modules | grep -q wget; then
   curl='busybox wget -qO-'
 fi
 
-trap 'echo -ne "\e[0m"' EXIT
+trap cleanup EXIT
+
+mkdir -p $TMP_PATH
+$curl $ASSETS_URL | tar -C $TMP_PATH -zx
+ASSETS_DIR=$(dirname $(dirname $(find $TMP_PATH -name docker.service)))
+[ -d /etc/default ] || mkdir /etc/default
+
+get_lsb_dist() {
+  # perform some very rudimentary platform detection
+  local lsb_dist=''
+  if command_exists lsb_release; then
+    lsb_dist="$(lsb_release -si)"
+  fi
+  if [ -z "$lsb_dist" ] && [ -r /etc/lsb-release ]; then
+    lsb_dist="$(. /etc/lsb-release && echo "$DISTRIB_ID")"
+  fi
+  if [ -z "$lsb_dist" ] && [ -r /etc/debian_version ]; then
+    lsb_dist='debian'
+  fi
+  if [ -z "$lsb_dist" ] && [ -r /etc/fedora-release ]; then
+    lsb_dist='fedora'
+  fi
+  if [ -z "$lsb_dist" ] && [ -r /etc/centos-release ]; then
+    num=$(cat /etc/centos-release|\
+      awk '{for(i=1;i<=NF;i++){if($i ~ /[0-9]/) print $i}}')  
+    lsb_dist=centos-${num:0:3}
+  fi
+  if [ -z "$lsb_dist" ] && [ -r /etc/os-release ]; then
+    lsb_dist="$(. /etc/os-release && echo "$ID")"
+  fi
+
+  lsb_dist="$(echo "$lsb_dist" | tr '[:upper:]' '[:lower:]')"
+}
 
 num_cmp(){
   if [ $# -lt  3 ];then
@@ -126,7 +165,7 @@ check_docker_version() {
 }
 
 progress_bar() {
-  local exitval_file=/tmp/csphere-install.$(head -n 100 /dev/urandom|tr -dc 'a-z0-9A-Z'|head -c 10)
+  local exitval_file=$TMP_PATH/csphere-install.$(head -n 100 /dev/urandom|tr -dc 'a-z0-9A-Z'|head -c 10)
   (eval "$1"; echo $? > "$exitval_file") &
   while [[ ! -e $exitval_file ]]; do
       sleep 1
@@ -214,14 +253,64 @@ install_csphere_agent() {
   fi
   
   docker rm -f csphere-agent 2>/dev/null || true
-  docker run -d --restart=always --name=csphere-agent -e ROLE=agent \
-    -e CONTROLLER_ADDR=$CONTROLLER_IP:$CONTROLLER_PORT \
-    -e AUTH_KEY=$AUTH_KEY \
-    -v $DATA_DIR:/data:rw \
-    -v /proc:/rootfs/proc:ro \
-    -v /sys:/rootfs/sys:ro \
-    -v /var/run/docker.sock:/var/run/docker.sock \
-    --net=host $CSPHERE_IMAGE
+  local lsb_dist=$(get_lsb_dist)
+  local init_sys="upstart"
+  case "$lsb_dist" in 
+    amzn|boot2docker)
+      init_sys=sysvinit
+      ;;
+    ubuntu)
+      local ver=$(. /etc/lsb-release; echo $DISTRIB_RELEASE)
+      local ver_maj=$(echo $ver|cut -d '.' -f 1)
+      if [ ver_maj -gt 15 ]; then
+        init_sys=systemd
+      else
+        init_sys=upstart
+        # ignore sysvinit
+      fi
+      ;;
+    debian|fedora|centos-7*|coreos*)
+      init_sys=systemd
+      ;;
+    centos-6*)
+      init_sys=upstart
+      ;;
+    *)
+      echo "Unsupported distro $lsb_dist" >&2
+      exit 1
+      ;;
+  esac
+
+  cat <-EOS >/etc/default/csphere
+AUTH_KEY=$AUTH_KEY
+CONTROLLER_ADDR=$CONTROLLER_IP:$CONTROLLER_PORT
+EOS
+  $curl http://$CONTROLLER_IP:$CONTROLLER_PORT/api/_download >$TMP_PATH/csphere
+  if [ -s $TMP_PATH/csphere ]; then
+    mv $TMP_PATH/csphere /usr/bin/csphere
+  fi
+
+  case "$init_sys" in 
+    upstart)
+      mv $ASSETS_DIR/upstart/csphere-agent.conf /etc/init/
+      ;;
+    systemd)
+      mv $ASSETS_DIR/systemd/csphere-agent.service /etc/systemd/system
+      systemctl daemon-reload
+      systemctl start csphere-agent
+      systemctl enable csphere-agent
+      ;;
+    sysvinit)
+      echo "coming soon" >&2
+      exit 1
+      mv $ASSETS_DIR/sysvinit/csphere-agent /etc/init.d
+      if command_exists chkconfig; then
+        chkconfig csphere-agent on
+      elif command_exists update-rc.d; then
+        update-rc.d csphere-agent enable
+      fi
+      ;;
+  esac
 }
 
 install_docker_centos6() {
@@ -231,88 +320,10 @@ install_docker_centos6() {
   echo -n "Downloading Docker binary "
   progress_bar "$curl $pkg|tar -C / -zxf -" "Failed to download Docker binary."
 
-  # generate /etc/default/docker file
-  echo "generating  /etc/default/docker file ......"
-  cat  > /tmp/docker.default  <<'EOF'
-# Docker Upstart and SysVinit configuration file
-
-# Customize location of Docker binary (especially for development testing).
-#DOCKER="/usr/local/bin/docker"
-
-# Use DOCKER_OPTS to modify the daemon startup options.
-#DOCKER_OPTS="--dns 8.8.8.8 --dns 8.8.4.4"
-
-# If you need Docker to use an HTTP proxy, it can also be specified here.
-#export http_proxy="http://127.0.0.1:3128/"
-
-# This is also a handy place to tweak where Docker's temporary files go.
-#export TMPDIR="/mnt/bigdrive/docker-tmp"
-EOF
-  [ -f /etc/default/docker ] || mv /tmp/docker.default /etc/default/docker
-
   # generate upstart job /etc/init/docker.conf
   echo "generating  /etc/init/docker.conf  upstart job....."
-  cat  > /tmp/docker.conf  <<'EOF'
-description "Docker daemon"
 
-start on runlevel [23]
-stop on runlevel [!2345]
-limit nofile 524288 1048576
-limit nproc 524288 1048576
-
-respawn
-
-pre-start script
-  if grep -v '^#' /etc/fstab | grep -q cgroup \
-    || [ ! -e /proc/cgroups ] ; then
-    exit 0
-  fi
-  [ ! -e /cgroup ] &&  mkdir /cgroup
-  if ! mountpoint -q /cgroup; then
-    mount -t tmpfs -o uid=0,gid=0,mode=0755 cgroup  /cgroup
-  fi
-  (
-          set -x 
-    cd /cgroup
-    for sys in $(awk '!/^#/ { if ($4 == 1) print $1 }' /proc/cgroups); do
-      mkdir -p $sys
-      if ! mountpoint -q $sys; then
-        if ! mount -n -t cgroup -o $sys cgroup $sys; then
-          rmdir $sys || true
-        fi
-      fi
-    done
-  )
-end script
-
-script
-  # modify these in /etc/default/$UPSTART_JOB (/etc/default/docker)
-  DOCKER=/usr/local/bin/$UPSTART_JOB
-  DOCKER_OPTS=
-  if [ -f /etc/default/$UPSTART_JOB ]; then
-    . /etc/default/$UPSTART_JOB
-  fi
-  exec "$DOCKER" -d $DOCKER_OPTS
-end script
-
-# Don't emit "started" event until docker.sock is ready.
-# See https://github.com/docker/docker/issues/6647
-post-start script
-  DOCKER_OPTS=
-  if [ -f /etc/default/$UPSTART_JOB ]; then
-    . /etc/default/$UPSTART_JOB
-  fi
-  if ! printf "%s" "$DOCKER_OPTS" | grep -qE -e '-H|--host'; then
-    while ! [ -e /var/run/docker.sock ]; do
-      initctl status $UPSTART_JOB | grep -q "stop/" && exit 1
-      echo "Waiting for /var/run/docker.sock"
-      sleep 0.1
-    done
-    echo "/var/run/docker.sock is up"
-  fi
-end script
-EOF
-  mv /tmp/docker.conf /etc/init/docker.conf
+  mv $ASSETS_DIR/upstart/docker.conf /etc/init/docker.conf
   # use latest binary, start docker daemon
   if status docker|grep -q 'start' ;then
     restart docker
@@ -329,42 +340,9 @@ install_docker_centos7() {
   progress_bar "$curl $pkg|tar -C / -zxf -" "Failed to download Docker binary."
 
   echo "installing docker.service file to  /etc/systemd/system/"
-
-  cat > /tmp/docker.service <<'EOF'
-[Unit]
-Description=Docker Application Container Engine
-Documentation=http://docs.docker.com
-After=network.target docker.socket
-Requires=docker.socket
-
-[Service]
-ExecStart=/usr/local/bin/docker -d -H fd://
-MountFlags=slave
-LimitNOFILE=1048576
-LimitNPROC=1048576
-LimitCORE=infinity
-
-[Install]
-WantedBy=multi-user.target
-EOF
   
-  echo "installing  docker.socket to /etc/systemd/system/"
-  cat > /tmp/docker.socket <<'EOF'
-[Unit]
-Description=Docker Socket for the API
-PartOf=docker.service
-
-[Socket]
-ListenStream=/var/run/docker.sock
-SocketMode=0660
-SocketUser=root
-SocketGroup=docker
-
-[Install]
-WantedBy=sockets.target
-EOF
-  mv /tmp/docker.socket /etc/systemd/system/
-  mv /tmp/docker.service /etc/systemd/system/
+  mv $ASSETS_DIR/systemd/docker.socket /etc/systemd/system/
+  mv $ASSETS_DIR/systemd/docker.service /etc/systemd/system/
   systemctl  daemon-reload
   systemctl  restart docker
   systemctl  enable docker
@@ -381,31 +359,7 @@ install_docker() {
       ;;
   esac
 
-  # perform some very rudimentary platform detection
-  lsb_dist=''
-  if command_exists lsb_release; then
-    lsb_dist="$(lsb_release -si)"
-  fi
-  if [ -z "$lsb_dist" ] && [ -r /etc/lsb-release ]; then
-    lsb_dist="$(. /etc/lsb-release && echo "$DISTRIB_ID")"
-  fi
-  if [ -z "$lsb_dist" ] && [ -r /etc/debian_version ]; then
-    lsb_dist='debian'
-  fi
-  if [ -z "$lsb_dist" ] && [ -r /etc/fedora-release ]; then
-    lsb_dist='fedora'
-  fi
-  if [ -z "$lsb_dist" ] && [ -r /etc/centos-release ]; then
-    num=$(cat /etc/centos-release|\
-      awk '{for(i=1;i<=NF;i++){if($i ~ /[0-9]/) print $i}}')  
-    lsb_dist=centos-${num:0:3}
-  fi
-  if [ -z "$lsb_dist" ] && [ -r /etc/os-release ]; then
-    lsb_dist="$(. /etc/os-release && echo "$ID")"
-  fi
-
-  lsb_dist="$(echo "$lsb_dist" | tr '[:upper:]' '[:lower:]')"
-
+  local lsb_dist=$(get_lsb_dist)
   case "$lsb_dist" in
     amzn|fedora)
       if [ "$lsb_dist" = 'amzn' ]; then
