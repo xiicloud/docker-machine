@@ -212,6 +212,10 @@ prepare_csphere() {
     chcon -Rt svirt_sandbox_file_t $DATA_DIR >/dev/null 2>&1 || true
   fi
 
+  if [ "$ROLE" = "agent" ]; then
+    return 0
+  fi
+
   CSPHERE_VERSION=$($curl https://csphere.cn/docs/latest-version.txt)
   if docker images|grep 'csphere/csphere'|grep -q $CSPHERE_VERSION; then
     echo "cSphere Docker image existed "
