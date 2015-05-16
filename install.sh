@@ -27,7 +27,7 @@ CONTROLLER_PORT=${CONTROLLER_PORT:-1016}
 ASSETS_URL=${ASSETS_URL:-"https://github.com/nicescale/docker-machine/archive/0.11.tar.gz"}
 #CSPHERE_IMAGE=${CSPHERE_IMAGE:-"csphere/csphere"}
 
-CSPHERE_IMAGE=http://csphere-image.stor.sinaapp.com/csphere.tar.gz
+CSPHERE_IMAGE=${CSPHERE_IMAGE:-"http://csphere-image.stor.sinaapp.com/csphere-0.11-master.tar.gz"}
 TMP_PATH=/tmp/csphere-install.$$
 
 command_exists() {
@@ -219,7 +219,9 @@ prepare_csphere() {
     return 0
   fi
 
-  CSPHERE_VERSION=$($curl https://csphere.cn/docs/latest-version.txt)
+  if [ -z "$CSPHERE_VERSION" ]; then
+    CSPHERE_VERSION=$($curl https://csphere.cn/docs/latest-version.txt)
+  fi
   if docker images|grep 'csphere/csphere'|grep -q $CSPHERE_VERSION; then
     echo "cSphere Docker image existed "
     CSPHERE_IMAGE=csphere/csphere:$CSPHERE_VERSION
