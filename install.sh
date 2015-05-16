@@ -24,7 +24,7 @@ HAS_DOCKER=true
 DOCKER_REPO_URL=https://get.docker.com
 DEFAULT_DATA_DIR="/data/csphere"
 CONTROLLER_PORT=${CONTROLLER_PORT:-1016}
-ASSETS_URL=${ASSETS_URL:-"https://github.com/nicescale/docker-machine/archive/master.tar.gz"}
+ASSETS_URL=${ASSETS_URL:-"https://github.com/nicescale/docker-machine/archive/0.11.tar.gz"}
 #CSPHERE_IMAGE=${CSPHERE_IMAGE:-"csphere/csphere"}
 
 CSPHERE_IMAGE=http://csphere-image.stor.sinaapp.com/csphere.tar.gz
