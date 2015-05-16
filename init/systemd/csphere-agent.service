@@ -6,7 +6,7 @@ Requires=docker.service
 
 [Service]
 EnvironmentFile=/etc/default/csphere
-ExecStart=/usr/bin/csphere --tls join --addr=${CONTROLLER_ADDR}
+ExecStart=/usr/bin/csphere join --addr=${CONTROLLER_ADDR}
 RestartSec=5
 Restart=true
 LimitNOFILE=2048
