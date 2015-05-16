@@ -1,0 +1,16 @@
+[Unit]
+Description=cSphere agent
+Documentation=https://csphere.cn/docs/
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+EnvironmentFile=/etc/default/csphere
+ExecStart=/usr/bin/csphere join --addr=${CONTROLLER_ADDR}
+RestartSec=5
+Restart=true
+LimitNOFILE=2048
+LimitCORE=infinity
+
+[Install]
+WantedBy=multi-user.target
