@@ -58,6 +58,9 @@ fi
 trap cleanup EXIT
 
 mkdir -p $TMP_PATH
+if [ "$ROLE" = "agent" -a -n "$CONTROLLER_IP" ]; then
+  ASSETS_URL="http://$CONTROLLER_IP:$CONTROLLER_PORT/api/_download?file=install_scripts"
+fi
 $curl $ASSETS_URL | tar -C $TMP_PATH -zx
 ASSETS_DIR=$(dirname $(dirname $(find $TMP_PATH -name docker.service)))
 [ -d /etc/default ] || mkdir /etc/default
@@ -299,6 +302,7 @@ EOS
   case "$init_sys" in 
     upstart)
       mv $ASSETS_DIR/upstart/csphere-agent.conf /etc/init/
+      initctl stop csphere-agent || true
       initctl start csphere-agent
       ;;
     systemd)
