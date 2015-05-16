@@ -1,13 +1,16 @@
 [Unit]
-Description=Docker Socket for the API
-PartOf=docker.service
+Description=Docker Application Container Engine
+Documentation=http://docs.docker.com
+After=network.target docker.socket
+Requires=docker.socket
 
-[Socket]
-ListenStream=/var/run/docker.sock
-SocketMode=0660
-SocketUser=root
-SocketGroup=docker
+[Service]
+ExecStart=/usr/local/bin/docker -d -H fd://
+MountFlags=slave
+LimitNOFILE=1048576
+LimitNPROC=1048576
+LimitCORE=infinity
 
 [Install]
-WantedBy=sockets.target
+WantedBy=multi-user.target
 
