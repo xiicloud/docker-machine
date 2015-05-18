@@ -24,8 +24,8 @@ HAS_DOCKER=true
 DOCKER_REPO_URL=https://get.docker.com
 DEFAULT_DATA_DIR="/data/csphere"
 CONTROLLER_PORT=${CONTROLLER_PORT:-1016}
-CSPHERE_IMAGE=${CSPHERE_IMAGE:-"http://csphere-image.stor.sinaapp.com/csphere-0.11.0.tar.gz"}
 CSPHERE_VERSION=${CSPHERE_VERSION:-0.11.0}
+CSPHERE_IMAGE=${CSPHERE_IMAGE:-"http://csphere-image.stor.sinaapp.com/csphere-${CSPHERE_VERSION}.tar.gz"}
 
 command_exists() {
   command -v "$@" > /dev/null 2>&1
