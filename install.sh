@@ -24,7 +24,7 @@ HAS_DOCKER=true
 DOCKER_REPO_URL=https://get.docker.com
 DEFAULT_DATA_DIR="/data/csphere"
 CONTROLLER_PORT=${CONTROLLER_PORT:-1016}
-CSPHERE_VERSION=${CSPHERE_VERSION:-0.11.1}
+CSPHERE_VERSION=${CSPHERE_VERSION:-0.11.2}
 CSPHERE_IMAGE=${CSPHERE_IMAGE:-"http://csphere-image.stor.sinaapp.com/csphere-${CSPHERE_VERSION}.tar.gz"}
 
 command_exists() {
@@ -174,7 +174,6 @@ prepare_csphere() {
 
   if docker images|grep 'csphere/csphere'|grep -q $CSPHERE_VERSION; then
     echo "cSphere Docker image existed "
-    CSPHERE_IMAGE=csphere/csphere:$CSPHERE_VERSION
     return 0
   fi
 
@@ -218,8 +217,8 @@ install_csphere_agent() {
     -v $DATA_DIR:/data:rw \
     -v /proc:/rootfs/proc:ro \
     -v /sys:/rootfs/sys:ro \
+    -v /etc:/rootfs/etc:rw \
     -v /var/run/docker.sock:/var/run/docker.sock \
-    -v /etc/docker:/etc/docker:rw \
     --net=host $CSPHERE_IMAGE
 }
 
