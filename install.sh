@@ -97,6 +97,20 @@ get_docker_cmd() {
   fi
 }
 
+wait_for_docker() {
+  echo "Waiting for docker daemon startup..."
+  for i in $(seq 1 120); do
+    if docker info >/dev/null; then
+      return 0
+    else
+      sleep 1
+    fi
+  done
+  echo "Docker daemon isn't running."
+  echo "Please start the Docker daemon and run this script again."
+  exit 1
+}
+
 # should be called after 'get_docker_cmd'
 check_docker_version() {
   local ask_upgrade=false
@@ -542,6 +556,7 @@ install_docker() {
 
 get_docker_cmd
 if $HAS_DOCKER; then
+  wait_for_docker
   check_docker_version
   if $UPGRADE_DOCKER; then
     echo "Your docker daemon and all your running containers will be restarted."
@@ -554,6 +569,7 @@ fi
 
 if ! $HAS_DOCKER || $UPGRADE_DOCKER; then
   install_docker
+  wait_for_docker
 fi
 
 echo "============= install cSphere ==========="
