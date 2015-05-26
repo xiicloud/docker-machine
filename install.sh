@@ -188,6 +188,7 @@ prepare_csphere() {
 
   if docker images|grep 'csphere/csphere'|grep -q $CSPHERE_VERSION; then
     echo "cSphere Docker image existed "
+    CSPHERE_IMAGE=csphere/csphere:$CSPHERE_VERSION
     return 0
   fi
 
