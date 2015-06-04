@@ -432,11 +432,7 @@ install_docker() {
           yum update -yq; yum -y -q install docker-io
         )
       fi
-      if command_exists docker && [ -e /var/run/docker.sock ]; then
-        docker version
-      fi
       service docker start || true
-      docker version
       your_user=your-user
       [ "$USER" != 'root' ] && your_user="$USER"
       echo
@@ -458,9 +454,6 @@ install_docker() {
         install_docker_centos7
       else
         echo "Your system is not supported by Docker." && exit 1
-      fi
-      if command_exists docker && [ -e /var/run/docker.sock ]; then
-        docker version
       fi
       ;;
 
@@ -517,9 +510,6 @@ install_docker() {
         echo deb ${DOCKER_REPO_URL}/ubuntu docker main > /etc/apt/sources.list.d/docker.list
         apt-get update -yq; apt-get install -y -q lxc-docker
       )
-      if command_exists docker && [ -e /var/run/docker.sock ]; then
-        docker version
-      fi
       your_user=your-user
       [ "$USER" != 'root' ] && your_user="$USER"
       echo
@@ -572,6 +562,7 @@ if ! $HAS_DOCKER || $UPGRADE_DOCKER; then
   install_docker
   wait_for_docker
 fi
+docker version
 
 echo "============= install cSphere ==========="
 echo "cSphere has 2 components: controller and agent."
