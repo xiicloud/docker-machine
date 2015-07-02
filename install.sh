@@ -211,6 +211,7 @@ install_csphere_controller() {
     -p $CONTROLLER_PORT:80 \
     -e ROLE=controller \
     -e AUTH_KEY=$AUTH_KEY \
+    -l CSPHERE_ROLE=controller \
     $CSPHERE_IMAGE
 }
 
@@ -234,6 +235,7 @@ install_csphere_agent() {
     -v /sys:/rootfs/sys:ro \
     -v /etc:/rootfs/etc:rw \
     -v /var/run/docker.sock:/var/run/docker.sock \
+    -l CSPHERE_ROLE=agent \
     --net=host $CSPHERE_IMAGE
 }
 
