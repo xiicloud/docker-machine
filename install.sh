@@ -24,7 +24,7 @@ HAS_DOCKER=true
 DOCKER_REPO_URL=https://get.docker.com
 DEFAULT_DATA_DIR="/data/csphere"
 CONTROLLER_PORT=${CONTROLLER_PORT:-1016}
-CSPHERE_VERSION=${CSPHERE_VERSION:-0.11.2}
+CSPHERE_VERSION=${CSPHERE_VERSION:-0.12.3}
 CSPHERE_IMAGE=${CSPHERE_IMAGE:-"http://csphere-image.stor.sinaapp.com/csphere-${CSPHERE_VERSION}.tar.gz"}
 
 command_exists() {
@@ -116,13 +116,11 @@ check_docker_version() {
   local ask_upgrade=false
   local must_upgrade=false
   local ver=$($DOCKER_CMD version|grep 'Server version'|cut -d ' ' -f 3|awk -F '.' '{print $1"."$2}')
-  if num_cmp $ver "<" 1.3; then
-    echo "Your Docker version is not supported."
+  if num_cmp $ver "<" 1.6; then
+    echo "The version of Docker is not supported."
+    echo "To use cSphere you must upgrade Docker to 1.6 or above."
     ask_upgrade=true
     must_upgrade=true
-  elif num_cmp $ver "<" 1.5; then
-    echo "Your Docker doesn't support container metrics."
-    ask_upgrade=true
   fi
   
   if $ask_upgrade; then
@@ -140,7 +138,7 @@ check_docker_version() {
 
 progress_bar() {
   local exitval_file=/tmp/csphere-install.$(head -n 100 /dev/urandom|tr -dc 'a-z0-9A-Z'|head -c 10)
-  (eval "$1"; echo $? > "$exitval_file") &
+  (set -e; eval "$1"; echo $? > "$exitval_file") &
   while [[ ! -e $exitval_file ]]; do
       sleep 1
       echo -en "."
@@ -186,15 +184,17 @@ prepare_csphere() {
     chcon -Rt svirt_sandbox_file_t $DATA_DIR >/dev/null 2>&1 || true
   fi
 
-  if docker images|grep 'csphere/csphere'|grep -q $CSPHERE_VERSION; then
+  if docker images|grep "^csphere/csphere"|grep -q "$CSPHERE_VERSION"; then
     echo "cSphere Docker image existed "
     CSPHERE_IMAGE=csphere/csphere:$CSPHERE_VERSION
     return 0
   fi
 
   if echo $CSPHERE_IMAGE|grep -q http; then
+    local image_file=/tmp/csphere-image.$(head -n 100 /dev/urandom|tr -dc 'a-z0-9A-Z'|head -c 10).tar.gz
     echo -n "Downloading cSphere Docker image "
-    progress_bar "$curl $CSPHERE_IMAGE|docker load" "Failed to download cSphere Docker image."
+    progress_bar "$curl $CSPHERE_IMAGE >$image_file" "Failed to download cSphere Docker image."
+    docker load -i $image_file
     CSPHERE_IMAGE=csphere/csphere:$CSPHERE_VERSION
   else
     docker pull $CSPHERE_IMAGE
