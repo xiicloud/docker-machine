@@ -380,6 +380,10 @@ WantedBy=sockets.target
 EOF
   mv /tmp/docker.socket /etc/systemd/system/
   mv /tmp/docker.service /etc/systemd/system/
+  
+  if ! getent group docker > /dev/null; then
+    groupadd --system docker
+  fi
   systemctl  daemon-reload
   systemctl  restart docker
   systemctl  enable docker
