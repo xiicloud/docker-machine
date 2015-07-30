@@ -193,7 +193,15 @@ start_docker() {
   initctl start docker || systemctl start docker || service docker start
 }
 
+dist_fixup() {
+  if [ -f /etc/centos-release ] && grep -q '7\.0\.' /etc/centos-release; then
+    yum update -y device-mapper-libs
+  fi
+}
+
 main() {
+  # Install missing dependencies on some distros.
+  dist_fixup
   get_docker_cmd
   if $HAS_DOCKER; then
     start_docker
