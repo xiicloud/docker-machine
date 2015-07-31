@@ -200,6 +200,15 @@ dist_fixup() {
 }
 
 main() {
+  curl=''
+  if command_exists curl; then
+    curl='curl -sSL'
+  elif command_exists wget; then
+    curl='wget -qO-'
+  elif command_exists busybox && busybox --list-modules | grep -q wget; then
+    curl='busybox wget -qO-'
+  fi
+
   # Install missing dependencies on some distros.
   dist_fixup
   get_docker_cmd
