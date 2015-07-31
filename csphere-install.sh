@@ -125,7 +125,7 @@ prepare_csphere() {
     chcon -Rt svirt_sandbox_file_t $DATA_DIR >/dev/null 2>&1 || true
   fi
 
-  if docker images|grep "^csphere/csphere"|grep -w -q "$CSPHERE_VERSION"; then
+  if docker inspect --format='{{.Id}}' "csphere/csphere:$CSPHERE_VERSION" >/dev/null 2>&1; then
     echo "cSphere Docker image existed "
     CSPHERE_IMAGE=csphere/csphere:$CSPHERE_VERSION
     return 0
