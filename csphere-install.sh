@@ -72,7 +72,7 @@ check_docker_version() {
     ask_upgrade=true
     must_upgrade=true
   fi
-  
+
   if $ask_upgrade; then
     echo -ne "\e[32m"
     local choice=$(get_bool_choice "Do you want to upgrade your docker?")
@@ -166,11 +166,12 @@ install_csphere_agent() {
       [ -n "$CONTROLLER_IP" ] && break
     done
   fi
-  
+
   docker rm -f csphere-agent 2>/dev/null || true
   docker run -d --restart=always --name=csphere-agent -e ROLE=agent \
     -e CONTROLLER_ADDR=$CONTROLLER_IP:$CONTROLLER_PORT \
     -e AUTH_KEY=$AUTH_KEY \
+    -e SVRPOOLID=$SVRPOOLID \
     -v $DATA_DIR:/data:rw \
     -v /proc:/rootfs/proc:ro \
     -v /sys:/rootfs/sys:ro \
